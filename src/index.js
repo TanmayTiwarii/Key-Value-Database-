@@ -7,9 +7,15 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(express.json());
 
+import { replicationMiddleware } from './replication/middleware.js';
+
+app.use('/api/kv', replicationMiddleware);
 app.use('/api/kv', kvroutes);
 
-// Initialize KV store before starting the server
+import { loadConfig } from './config.js';
+
+// Initialize Config and KV store before starting the server
+await loadConfig();
 await store.init();
 
 app.listen(PORT, () => {

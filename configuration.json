@@ -1,0 +1,6 @@
+{
+    "role": "leader",
+    "followers": [
+        "http://localhost:3001"
+    ]
+}
