@@ -89,7 +89,11 @@ class KVStore {
         this.operationsCount++;
 
         if (this.operationsCount >= 100) {
-            await this._takeSnapshot();
+            try {
+                await this._takeSnapshot();
+            } catch (err) {
+                console.error('Snapshot failed, will retry on next write:', err);
+            }
         }
     }
 
@@ -107,7 +111,11 @@ class KVStore {
         this.operationsCount++;
 
         if (this.operationsCount >= 100) {
-            await this._takeSnapshot();
+            try {
+                await this._takeSnapshot();
+            } catch (err) {
+                console.error('Snapshot failed, will retry on next write:', err);
+            }
         }
     }
 }
