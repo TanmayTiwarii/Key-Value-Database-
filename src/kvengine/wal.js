@@ -7,6 +7,7 @@ export class WAL {
     constructor(dirPath) {
         this.dirPath = dirPath;
         this.currentFilePath = null;
+        this.fileHandle = null;
     }
 
     async init() {
@@ -18,15 +19,19 @@ export class WAL {
         
         if (walFiles.length > 0) {
             this.currentFilePath = path.join(this.dirPath, walFiles[walFiles.length - 1]);
+            // Open a persistent file handle in append mode
+            this.fileHandle = await fs.open(this.currentFilePath, 'a');
         } else {
             await this.rotate();
         }
     }
 
     async append(operation) {
-        if (!this.currentFilePath) throw new Error("WAL not initialized");
+        if (!this.fileHandle) throw new Error("WAL not initialized");
         const line = JSON.stringify(operation) + '\n';
-        await fs.appendFile(this.currentFilePath, line);
+        // Write and flush to physical disk — guarantees durability
+        await this.fileHandle.write(line);
+        await this.fileHandle.sync();
     }
 
     async replay() {
@@ -45,7 +50,12 @@ export class WAL {
 
                 for await (const line of rl) {
                     if (line.trim()) {
-                        operations.push(JSON.parse(line));
+                        try {
+                            operations.push(JSON.parse(line));
+                        } catch (e) {
+                            // Skip corrupted/partial lines from interrupted writes
+                            console.warn(`Skipping corrupted WAL entry: ${line}`);
+                        }
                     }
                 }
             } catch (error) {
@@ -58,11 +68,18 @@ export class WAL {
 
     async rotate() {
         const oldFilePath = this.currentFilePath;
+
+        // Close the current file handle before switching
+        if (this.fileHandle) {
+            await this.fileHandle.close();
+            this.fileHandle = null;
+        }
+        
         const newFileName = `wal_${Date.now()}.log`;
         this.currentFilePath = path.join(this.dirPath, newFileName);
         
-        // Touch the new file
-        await fs.writeFile(this.currentFilePath, '');
+        // Open a new persistent file handle in append mode
+        this.fileHandle = await fs.open(this.currentFilePath, 'a');
         
         return oldFilePath;
     }
@@ -73,6 +90,13 @@ export class WAL {
             await fs.unlink(filePath);
         } catch (error) {
             if (error.code !== 'ENOENT') throw error;
+        }
+    }
+
+    async close() {
+        if (this.fileHandle) {
+            await this.fileHandle.close();
+            this.fileHandle = null;
         }
     }
 }
